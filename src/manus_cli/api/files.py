@@ -17,7 +17,7 @@ class FileService:
     async def create_upload(self, file_name: str) -> PresignedUpload:
         """Request a presigned upload URL for a new file."""
         data = await self._client.request(
-            "POST", "/files", json={"file_name": file_name}
+            "POST", "/files", json={"filename": file_name}
         )
         return PresignedUpload.model_validate(data)
 

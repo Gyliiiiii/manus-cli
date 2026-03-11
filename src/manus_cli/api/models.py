@@ -20,15 +20,17 @@ class TaskStatus(StrEnum):
 
 class AgentProfile(StrEnum):
     MANUS_1_6 = "manus-1.6"
-    LITE = "lite"
-    MAX = "max"
+    LITE = "manus-1.6-lite"
+    MAX = "manus-1.6-max"
 
 
 class CreateTaskRequest(_Base):
     prompt: str
-    agent_profile: AgentProfile = AgentProfile.MANUS_1_6
-    task_mode: str | None = None
-    task_id: str | None = None  # for multi-turn continuation
+    agent_profile: AgentProfile = Field(
+        default=AgentProfile.MANUS_1_6, alias="agentProfile"
+    )
+    task_mode: str | None = Field(default=None, alias="taskMode")
+    task_id: str | None = Field(default=None, alias="taskId")  # for multi-turn continuation
     attachments: list[str] = Field(default_factory=list)  # file IDs
 
 
@@ -44,9 +46,10 @@ class OutputText(_Base):
 
 class OutputFile(_Base):
     type: str = "file"
-    file_id: str
-    file_name: str
-    url: str | None = None
+    file_id: str | None = Field(default=None, alias="id")
+    file_name: str = Field(alias="fileName")
+    url: str | None = Field(default=None, alias="fileUrl")
+    mime_type: str | None = Field(default=None, alias="mimeType")
 
 
 class OutputMessage(_Base):
@@ -83,24 +86,30 @@ class TaskDetail(_Base):
                 messages = []
                 for item in out:
                     if isinstance(item, dict):
-                        messages.append(item)
+                        if "content" in item or "role" in item:
+                            messages.append(item)
+                        else:
+                            messages.append({"role": "assistant", "content": [item]})
                     else:
                         messages.append({"content": []})
                 data["output"] = messages
             elif isinstance(out, dict):
-                # single message dict -> wrap in list
-                data["output"] = [out]
+                if "content" in out or "role" in out:
+                    data["output"] = [out]
+                else:
+                    data["output"] = [{"role": "assistant", "content": [out]}]
         return data
 
 
 class FileInfo(_Base):
-    file_id: str
-    file_name: str
-    file_size: int | None = None
+    file_id: str = Field(alias="id")
+    file_name: str = Field(alias="filename")
+    file_size: int | None = Field(default=None, alias="size")
     url: str | None = None
     created_at: str | None = None
 
 
 class PresignedUpload(_Base):
-    file_id: str
+    file_id: str = Field(alias="id")
+    file_name: str | None = Field(default=None, alias="filename")
     upload_url: str

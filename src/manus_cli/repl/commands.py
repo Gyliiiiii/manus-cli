@@ -107,7 +107,11 @@ def create_default_registry() -> SlashCommandRegistry:
     registry.register("exit", "Exit the REPL", cmd_exit)
     registry.register("quit", "Exit the REPL", cmd_exit)
     registry.register("clear", "Clear conversation (start new task)", cmd_clear)
-    registry.register("model", "Switch model (manus-1.6, lite, max)", cmd_model)
+    registry.register(
+        "model",
+        "Switch model (manus-1.6, manus-1.6-lite, manus-1.6-max)",
+        cmd_model,
+    )
     registry.register("status", "Show current task status", cmd_status)
     registry.register("files", "List uploaded files", cmd_files)
     registry.register("attach", "Attach a file to next prompt", cmd_attach)

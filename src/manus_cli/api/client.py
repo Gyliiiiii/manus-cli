@@ -24,7 +24,7 @@ class ManusClient:
             )
         return self._client
 
-    async def request(self, method: str, path: str, **kwargs: object) -> dict:
+    async def request(self, method: str, path: str, **kwargs: object) -> object:
         """Send an HTTP request and return the parsed JSON response."""
         client = await self._get_client()
         response = await client.request(method, path, **kwargs)
@@ -35,6 +35,8 @@ class ManusClient:
             except Exception:
                 pass
             raise APIError(response.status_code, str(detail))
+        if response.status_code == 204 or not response.content:
+            return {}
         return response.json()
 
     async def close(self) -> None:

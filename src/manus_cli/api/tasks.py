@@ -12,7 +12,7 @@ class TaskService:
 
     async def create(self, request: CreateTaskRequest) -> CreateTaskResponse:
         data = await self._client.request(
-            "POST", "/tasks", json=request.model_dump(exclude_none=True)
+            "POST", "/tasks", json=request.model_dump(exclude_none=True, by_alias=True)
         )
         return CreateTaskResponse.model_validate(data)
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Optional
+from typing import Awaitable, Optional
 
 import typer
 from rich.console import Console
@@ -34,6 +34,17 @@ def version_callback(value: bool):
         raise typer.Exit()
 
 
+def _run_command(command: Awaitable[None]) -> None:
+    from manus_cli.core.errors import ManusError
+    from manus_cli.repl.renderer import OutputRenderer
+
+    try:
+        asyncio.run(command)
+    except ManusError as e:
+        OutputRenderer().render_error(str(e))
+        raise typer.Exit(1)
+
+
 @app.callback(invoke_without_command=True)
 def main(
     ctx: typer.Context,
@@ -48,7 +59,7 @@ def main(
     if prompt:
         asyncio.run(_one_shot(prompt, model))
     else:
-        asyncio.run(_start_repl(model))
+        _run_command(_start_repl(model))
 
 
 async def _one_shot(prompt: str, model: str):
@@ -98,7 +109,7 @@ def chat(
     model: str = typer.Option("manus-1.6", "--model", "-m"),
 ):
     """Start interactive REPL session."""
-    asyncio.run(_start_repl(model))
+    _run_command(_start_repl(model))
 
 
 # --- Auth commands ---
@@ -190,7 +201,7 @@ def task_list(
     limit: int = typer.Option(20, "--limit", "-n"),
 ):
     """List recent tasks."""
-    asyncio.run(_task_list(limit))
+    _run_command(_task_list(limit))
 
 
 async def _task_list(limit: int):
@@ -206,7 +217,7 @@ async def _task_list(limit: int):
 @task_app.command("get")
 def task_get(task_id: str = typer.Argument(..., help="Task ID")):
     """Get task details."""
-    asyncio.run(_task_get(task_id))
+    _run_command(_task_get(task_id))
 
 
 async def _task_get(task_id: str):
@@ -222,7 +233,7 @@ async def _task_get(task_id: str):
 @task_app.command("delete")
 def task_delete(task_id: str = typer.Argument(...)):
     """Delete a task."""
-    asyncio.run(_task_delete(task_id))
+    _run_command(_task_delete(task_id))
 
 
 async def _task_delete(task_id: str):
@@ -240,7 +251,7 @@ async def _task_delete(task_id: str):
 @file_app.command("upload")
 def file_upload(path: Path = typer.Argument(..., help="File path to upload")):
     """Upload a file."""
-    asyncio.run(_file_upload(path))
+    _run_command(_file_upload(path))
 
 
 async def _file_upload(path: Path):
@@ -258,7 +269,7 @@ async def _file_upload(path: Path):
 @file_app.command("list")
 def file_list(limit: int = typer.Option(20, "--limit", "-n")):
     """List uploaded files."""
-    asyncio.run(_file_list(limit))
+    _run_command(_file_list(limit))
 
 
 async def _file_list(limit: int):

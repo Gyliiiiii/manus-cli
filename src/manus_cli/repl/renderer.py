@@ -44,9 +44,14 @@ class OutputRenderer:
         self._console.print(Panel(md, border_style="blue", padding=(1, 2)))
 
     def _render_file(self, file: OutputFile) -> None:
-        url_text = f" ({file.url})" if file.url else ""
+        meta_parts = []
+        if file.file_id:
+            meta_parts.append(file.file_id)
+        if file.url:
+            meta_parts.append(file.url)
+        meta_text = f" [dim]{' | '.join(meta_parts)}[/dim]" if meta_parts else ""
         self._console.print(
-            f"  [bold green]📎 {file.file_name}[/bold green] [dim]{file.file_id}{url_text}[/dim]"
+            f"  [bold green]📎 {file.file_name}[/bold green]{meta_text}"
         )
 
     def render_info(self, message: str) -> None:
