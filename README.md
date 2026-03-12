@@ -76,6 +76,21 @@ pip install -e ".[dev]"
 pytest
 ```
 
+## CI
+
+Pull requests run an automated review workflow in GitHub Actions. The workflow:
+
+- collects the Python files changed in the PR
+- runs `ruff` only on the changed Python files for focused lint feedback
+- compiles `src/` and `tests/` to catch syntax/import issues quickly
+- runs `pytest`
+- posts a summary comment back to the PR
+
+Additional GitHub-native security checks:
+
+- `Dependency Review` runs on pull requests and fails on newly introduced `high` or `critical` dependency findings
+- `CodeQL` scans Python on pushes to `main`, pull requests targeting `main`, and a weekly schedule
+
 ## License
 
 MIT

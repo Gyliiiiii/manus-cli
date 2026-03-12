@@ -1,0 +1,170 @@
+name: PR Review
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Collect changed Python files
+        id: changed
+        shell: bash
+        run: |
+          base_sha="${{ github.event.pull_request.base.sha }}"
+          head_sha="${{ github.event.pull_request.head.sha }}"
+
+          mapfile -t changed_files < <(git diff --name-only "$base_sha" "$head_sha" -- '*.py')
+
+          if [ "${#changed_files[@]}" -eq 0 ]; then
+            {
+              echo "count=0"
+              echo "files<<EOF"
+              echo "None"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          {
+            echo "count=${#changed_files[@]}"
+            echo "files<<EOF"
+            printf '%s\n' "${changed_files[@]}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Run Ruff on changed Python files
+        id: ruff
+        if: steps.changed.outputs.count != '0'
+        env:
+          CHANGED_FILES: ${{ steps.changed.outputs.files }}
+        shell: bash
+        run: |
+          mapfile -t changed_files <<< "$CHANGED_FILES"
+          python -m ruff check --output-format=github "${changed_files[@]}"
+
+      - name: Compile Python sources
+        id: compile
+        run: python -m compileall src tests
+
+      - name: Run test suite
+        id: tests
+        run: python -m pytest -q
+
+      - name: Write job summary
+        if: always()
+        env:
+          CHANGED_COUNT: ${{ steps.changed.outputs.count }}
+          CHANGED_FILES: ${{ steps.changed.outputs.files }}
+          RUFF_OUTCOME: ${{ steps.ruff.outcome }}
+          COMPILE_OUTCOME: ${{ steps.compile.outcome }}
+          TEST_OUTCOME: ${{ steps.tests.outcome }}
+        run: |
+          cat <<EOF >> "$GITHUB_STEP_SUMMARY"
+          ## Automated PR Review
+
+          - Changed Python files: ${CHANGED_COUNT}
+          - Ruff (changed files): ${RUFF_OUTCOME}
+          - Compile check: ${COMPILE_OUTCOME}
+          - Test suite: ${TEST_OUTCOME}
+
+          ### Changed Python files
+          \`\`\`text
+          ${CHANGED_FILES}
+          \`\`\`
+          EOF
+
+      - name: Update PR summary comment
+        if: always()
+        continue-on-error: true
+        uses: actions/github-script@v7
+        env:
+          CHANGED_COUNT: ${{ steps.changed.outputs.count }}
+          CHANGED_FILES: ${{ steps.changed.outputs.files }}
+          RUFF_OUTCOME: ${{ steps.ruff.outcome }}
+          COMPILE_OUTCOME: ${{ steps.compile.outcome }}
+          TEST_OUTCOME: ${{ steps.tests.outcome }}
+        with:
+          script: |
+            const marker = '<!-- manus-cli-pr-review -->';
+            const icon = (outcome) => {
+              if (outcome === 'success') return 'PASS';
+              if (outcome === 'failure') return 'FAIL';
+              if (outcome === 'skipped') return 'SKIP';
+              return 'UNKNOWN';
+            };
+
+            const body = [
+              marker,
+              '## Automated PR Review',
+              '',
+              `- Changed Python files: ${process.env.CHANGED_COUNT || '0'}`,
+              `- Ruff (changed files): ${icon(process.env.RUFF_OUTCOME)}`,
+              `- Compile check: ${icon(process.env.COMPILE_OUTCOME)}`,
+              `- Test suite: ${icon(process.env.TEST_OUTCOME)}`,
+              '',
+              '### Changed Python files',
+              '```text',
+              process.env.CHANGED_FILES || 'None',
+              '```',
+              '',
+              '> AI review is not enabled in this workflow yet. Add a model-backed step once repository secrets or platform credentials are available.',
+            ].join('\n');
+
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+
+            const existing = comments.find((comment) =>
+              comment.user?.type === 'Bot' && comment.body?.includes(marker)
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body,
+              });
+            }
