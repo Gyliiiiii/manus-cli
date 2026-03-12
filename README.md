@@ -21,7 +21,7 @@ manus -p "Summarize this article"
 
 # Interactive REPL (multi-turn conversation)
 manus
-manus -r                 # resume a recent task and continue chatting
+manus -r                 # open an interactive selector, resume a task, and continue chatting
 ```
 
 ## Commands
@@ -29,11 +29,11 @@ manus -r                 # resume a recent task and continue chatting
 | Command | Description |
 |---|---|
 | `manus` | Start interactive REPL |
-| `manus -r` | Resume a recent task, load context, and continue in REPL |
+| `manus -r` | Interactively choose a recent task, load context, and continue in REPL |
 | `manus run "prompt"` | One-shot task |
 | `manus -p "prompt"` | One-shot task (option form) |
 | `manus chat` | Start REPL (explicit) |
-| `manus chat -r` | Resume a recent task in REPL (explicit) |
+| `manus chat -r` | Interactively choose a recent task in REPL (explicit) |
 | `manus auth login` | Authenticate with API key |
 | `manus auth logout` | Remove saved API key |
 | `manus auth status` | Show auth status |

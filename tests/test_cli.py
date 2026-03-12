@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 
 from typer.testing import CliRunner
 
 import manus_cli.api.client as client_mod
 import manus_cli.cli as cli_mod
+import manus_cli.repl.prompt as prompt_mod
 from manus_cli.api.models import TaskDetail
 from manus_cli.cli import app
 from manus_cli.core.errors import AuthenticationError
-
 
 runner = CliRunner()
 
@@ -64,6 +65,65 @@ class TestResumeCli:
         assert cli_mod._resolve_resume_selection("2", tasks) == tasks[1]
         assert cli_mod._resolve_resume_selection("task-1", tasks) == tasks[0]
         assert cli_mod._resolve_resume_selection("99", tasks) is None
+
+    async def test_select_resume_task_uses_interactive_selector(self, monkeypatch):
+        tasks = [
+            TaskDetail.model_validate({"id": "task-1", "status": "completed", "output": []}),
+            TaskDetail.model_validate({"id": "task-2", "status": "running", "output": []}),
+        ]
+
+        async def fake_list(limit: int = 20):
+            assert limit == 20
+            return tasks
+
+        async def fake_get(task_id: str):
+            assert task_id == "task-2"
+            return tasks[1]
+
+        async def fake_select_resume_task_interactively(items):
+            assert items == tasks
+            return "task-2"
+
+        monkeypatch.setattr(prompt_mod, "supports_interactive_resume_selector", lambda: True)
+        monkeypatch.setattr(
+            prompt_mod,
+            "select_resume_task_interactively",
+            fake_select_resume_task_interactively,
+        )
+
+        session = SimpleNamespace(
+            task_service=SimpleNamespace(list=fake_list, get=fake_get),
+        )
+
+        selected, cancelled = await cli_mod._select_resume_task(session)
+
+        assert cancelled is False
+        assert selected == tasks[1]
+
+    async def test_select_resume_task_falls_back_to_text_prompt(self, monkeypatch):
+        tasks = [
+            TaskDetail.model_validate({"id": "task-1", "status": "completed", "output": []}),
+            TaskDetail.model_validate({"id": "task-2", "status": "running", "output": []}),
+        ]
+
+        async def fake_list(limit: int = 20):
+            return tasks
+
+        async def fake_get(task_id: str):
+            assert task_id == "task-1"
+            return tasks[0]
+
+        monkeypatch.setattr(prompt_mod, "supports_interactive_resume_selector", lambda: False)
+        monkeypatch.setattr(cli_mod.console, "input", lambda prompt: "1")
+
+        session = SimpleNamespace(
+            task_service=SimpleNamespace(list=fake_list, get=fake_get),
+        )
+
+        selected, cancelled = await cli_mod._select_resume_task(session)
+
+        assert cancelled is False
+        assert selected == tasks[0]
 
     def test_chat_renders_auth_error_without_traceback(self, monkeypatch):
         """chat should render a friendly auth error instead of a traceback."""

@@ -110,11 +110,22 @@ async def _one_shot(prompt: str, model: str):
 
 
 async def _select_resume_task(session, limit: int = 20) -> tuple[TaskDetail | None, bool]:
+    from manus_cli.repl.prompt import (
+        select_resume_task_interactively,
+        supports_interactive_resume_selector,
+    )
     from manus_cli.utils.display import print_task_table
 
     tasks = await session.task_service.list(limit=limit)
     if not tasks:
         return None, False
+
+    if supports_interactive_resume_selector():
+        selected_id = await select_resume_task_interactively(tasks)
+        if not selected_id:
+            return None, True
+        task = await session.task_service.get(selected_id)
+        return task, False
 
     print_task_table(tasks, console=console, show_index=True)
     prompt = f"Select a task to resume [1-{len(tasks)} or task id, Enter to cancel]: "
@@ -123,7 +134,6 @@ async def _select_resume_task(session, limit: int = 20) -> tuple[TaskDetail | No
         choice = (await asyncio.to_thread(console.input, prompt)).strip()
         if not choice:
             return None, True
-
         selected = _resolve_resume_selection(choice, tasks)
         if selected:
             task = await session.task_service.get(selected.task_id)
@@ -240,6 +250,7 @@ def auth_logout():
 def auth_status():
     """Show current authentication status."""
     import os
+
     from manus_cli.core.config import load_config
 
     config = load_config()
