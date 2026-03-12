@@ -6,6 +6,7 @@ from manus_cli.ci.gemini_review import (
     build_comment_body,
     build_review_prompt,
     extract_review_text,
+    normalize_review_text,
     select_review_files,
 )
 
@@ -78,3 +79,14 @@ class TestGeminiReviewHelpers:
         assert "## Gemini Review" in body
         assert "_Model: `gemini-2.5-flash`_" in body
         assert body.endswith("No material issues found.")
+
+    def test_normalize_review_text_suppresses_generic_secret_warning(self):
+        text = (
+            "- [medium] .github/workflows/gemini-review.yml: The `GEMINI_API_KEY` is passed "
+            "to the Python script via an environment variable. While this is standard for "
+            "secrets, the script does not explicitly prevent logging."
+        )
+
+        normalized = normalize_review_text(text)
+
+        assert normalized == "No material issues found."

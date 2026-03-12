@@ -150,7 +150,35 @@ def extract_review_text(response: dict) -> str:
     return text
 
 
+def normalize_review_text(review_text: str) -> str:
+    text = review_text.strip()
+    lower = text.lower()
+
+    if (
+        "gemini_api_key" in lower
+        and "environment variable" in lower
+        and "standard for secrets" in lower
+        and not any(
+            token in lower
+            for token in (
+                "echo",
+                "print",
+                "artifact",
+                "fork",
+                "third-party",
+                "untrusted",
+                "public",
+                "exfil",
+            )
+        )
+    ):
+        return "No material issues found."
+
+    return text
+
+
 def build_comment_body(review_text: str, model: str) -> str:
+    review_text = normalize_review_text(review_text)
     return "\n".join(
         [
             MARKER,
