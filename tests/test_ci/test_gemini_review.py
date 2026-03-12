@@ -51,6 +51,8 @@ class TestGeminiReviewHelpers:
         assert "Improve `manus -r` UX." in prompt
         assert "src/manus_cli/cli.py" in prompt
         assert "Some files or patch content were skipped" in prompt
+        assert "Do not report speculative best-practice concerns" in prompt
+        assert "Do not flag standard GitHub Actions secret usage" in prompt
 
     def test_extract_review_text_reads_first_candidate_parts(self):
         response = {

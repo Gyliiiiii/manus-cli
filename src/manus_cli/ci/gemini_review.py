@@ -87,6 +87,13 @@ def build_review_prompt(context: ReviewContext, files: list[dict], skipped: int)
         "You are a careful senior engineer reviewing a GitHub pull request.\n"
         "Focus on correctness bugs, behavioral regressions, security issues, unsafe workflow changes, "
         "and missing tests. Ignore minor style nits.\n"
+        "Do not report speculative best-practice concerns without a concrete exploit path, regression, "
+        "or observable failure mode in the diff.\n"
+        "Do not flag standard GitHub Actions secret usage via `${{ secrets.* }}` passed through step "
+        "environment variables unless the diff also exposes the secret through logging, artifacts, "
+        "forked pull requests, or untrusted third-party actions.\n"
+        "Do not complain about workflow permissions if they are already narrowed to the minimum needed "
+        "for the API operations shown in the diff.\n"
         'If you find no material issues, reply exactly with "No material issues found."\n'
         "Otherwise, reply in Markdown with a short flat bullet list. Each bullet must include:\n"
         "- a severity label in brackets: [high], [medium], or [low]\n"
