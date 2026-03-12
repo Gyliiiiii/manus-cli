@@ -79,3 +79,42 @@ class TestOutputRendererDownloads:
 
         assert (tmp_path / "report.txt").read_text(encoding="utf-8") == "existing"
         assert (tmp_path / "report-1.txt").read_bytes() == b"new content"
+
+    def test_render_task_context_shows_history_without_downloading_files(
+        self, tmp_path, monkeypatch
+    ):
+        """Loading prior context should not re-download historical file outputs."""
+        monkeypatch.chdir(tmp_path)
+        console = Console(record=True)
+        renderer = OutputRenderer(console=console)
+        task = TaskDetail.model_validate(
+            {
+                "id": "task-789",
+                "status": "completed",
+                "output": [
+                    {
+                        "role": "user",
+                        "content": [{"type": "text", "text": "Please summarize the report"}],
+                    },
+                    {
+                        "role": "assistant",
+                        "content": [
+                            {"type": "text", "text": "Summary is ready."},
+                            {
+                                "type": "output_file",
+                                "fileName": "report.txt",
+                                "fileUrl": "https://example.com/report.txt",
+                            },
+                        ],
+                    },
+                ],
+            }
+        )
+
+        renderer.render_task_context(task)
+
+        assert not (tmp_path / "report.txt").exists()
+        output = console.export_text()
+        assert "Loaded context from task task-789" in output
+        assert "Please summarize the report" in output
+        assert "report.txt" in output

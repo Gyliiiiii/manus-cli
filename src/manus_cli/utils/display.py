@@ -6,9 +6,24 @@ from rich.table import Table
 from manus_cli.api.models import FileInfo, TaskDetail
 
 
-def print_task_table(tasks: list[TaskDetail], console: Console | None = None) -> None:
+def task_preview(task: TaskDetail, max_width: int = 50) -> str:
+    if task.output:
+        for msg in task.output:
+            for item in msg.content:
+                if hasattr(item, "text"):
+                    return item.text[:max_width].replace("\n", " ")
+    return ""
+
+
+def print_task_table(
+    tasks: list[TaskDetail],
+    console: Console | None = None,
+    show_index: bool = False,
+) -> None:
     console = console or Console()
     table = Table(title="Tasks")
+    if show_index:
+        table.add_column("#", style="dim", justify="right", no_wrap=True)
     table.add_column("Task ID", style="cyan", no_wrap=True)
     table.add_column("Status", style="bold")
     table.add_column("Created", style="dim")
@@ -21,23 +36,18 @@ def print_task_table(tasks: list[TaskDetail], console: Console | None = None) ->
         "failed": "red",
     }
 
-    for task in tasks:
+    for idx, task in enumerate(tasks, 1):
         status_style = status_colors.get(task.status.value, "white")
-        preview = ""
-        if task.output:
-            for msg in task.output:
-                for item in msg.content:
-                    if hasattr(item, "text"):
-                        preview = item.text[:50].replace("\n", " ")
-                        break
-                if preview:
-                    break
-        table.add_row(
+        row = []
+        if show_index:
+            row.append(str(idx))
+        row.extend([
             task.task_id,
             f"[{status_style}]{task.status.value}[/{status_style}]",
             task.created_at or "",
-            preview,
-        )
+            task_preview(task),
+        ])
+        table.add_row(*row)
 
     console.print(table)
 
