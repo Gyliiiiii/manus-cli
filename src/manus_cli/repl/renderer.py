@@ -42,6 +42,37 @@ class OutputRenderer:
                 f"out: {task.credit_usage.output_credits:.2f})[/dim]"
             )
 
+    def render_task_context(self, task: TaskDetail) -> None:
+        """Render a task's existing conversation history without downloading files again."""
+        self._console.print(f"[dim]Loaded context from task {task.task_id}[/dim]")
+
+        if task.instructions and not task.output:
+            self._console.print("[bold cyan]user[/bold cyan]")
+            self._render_text(task.instructions)
+            return
+
+        if not task.output:
+            self._console.print("[dim]No prior conversation found for this task.[/dim]")
+            return
+
+        role_colors = {
+            "user": "cyan",
+            "assistant": "green",
+            "system": "yellow",
+        }
+
+        for msg in task.output:
+            color = role_colors.get(msg.role, "white")
+            self._console.print(f"[bold {color}]{msg.role}[/bold {color}]")
+            if not msg.content:
+                self._console.print("[dim]No content[/dim]")
+                continue
+            for item in msg.content:
+                if isinstance(item, OutputText):
+                    self._render_text(item.text)
+                elif isinstance(item, OutputFile):
+                    self._render_file_reference(item)
+
     def _render_text(self, text: str) -> None:
         md = Markdown(text)
         self._console.print(Panel(md, border_style="blue", padding=(1, 2)))
@@ -54,6 +85,17 @@ class OutputRenderer:
         if file.file_id:
             meta_parts.append(file.file_id)
         if file.url and not download_path:
+            meta_parts.append(file.url)
+        meta_text = f" [dim]{' | '.join(meta_parts)}[/dim]" if meta_parts else ""
+        self._console.print(
+            f"  [bold green]📎 {file.file_name}[/bold green]{meta_text}"
+        )
+
+    def _render_file_reference(self, file: OutputFile) -> None:
+        meta_parts = []
+        if file.file_id:
+            meta_parts.append(file.file_id)
+        if file.url:
             meta_parts.append(file.url)
         meta_text = f" [dim]{' | '.join(meta_parts)}[/dim]" if meta_parts else ""
         self._console.print(

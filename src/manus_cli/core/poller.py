@@ -8,7 +8,7 @@ from rich.spinner import Spinner
 
 from manus_cli.api.models import TaskDetail, TaskStatus
 from manus_cli.api.tasks import TaskService
-from manus_cli.core.errors import TaskFailedError, TaskTimeoutError
+from manus_cli.core.errors import APIError, TaskFailedError, TaskTimeoutError
 
 
 class TaskPoller:
@@ -19,12 +19,14 @@ class TaskPoller:
         backoff_factor: float = 1.5,
         max_interval: float = 10.0,
         timeout: float = 600.0,
+        not_found_retry_window: float = 10.0,
     ):
         self._task_service = task_service
         self._initial_interval = initial_interval
         self._backoff_factor = backoff_factor
         self._max_interval = max_interval
         self._timeout = timeout
+        self._not_found_retry_window = not_found_retry_window
 
     async def poll(self, task_id: str) -> TaskDetail:
         """Poll a task until terminal state. Shows Rich spinner with incremental output."""
@@ -40,7 +42,17 @@ class TaskPoller:
                 if elapsed > self._timeout:
                     raise TaskTimeoutError(task_id, elapsed)
 
-                task = await self._task_service.get(task_id)
+                try:
+                    task = await self._task_service.get(task_id)
+                except APIError as e:
+                    # The API can briefly return 404 right after task creation
+                    # before the task becomes queryable on the read path.
+                    if e.status_code == 404 and elapsed <= self._not_found_retry_window:
+                        spinner.update(text="Waiting for task to become available...")
+                        await asyncio.sleep(interval)
+                        interval = min(interval * self._backoff_factor, self._max_interval)
+                        continue
+                    raise
 
                 # Update spinner with incremental output preview
                 if task.output:

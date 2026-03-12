@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Awaitable, Optional
+from typing import TYPE_CHECKING, Awaitable, Optional
 
 import typer
 from rich.console import Console
 
 from manus_cli import __version__
+
+if TYPE_CHECKING:
+    from manus_cli.api.models import TaskDetail
 
 app = typer.Typer(
     name="manus",
@@ -45,10 +48,25 @@ def _run_command(command: Awaitable[None]) -> None:
         raise typer.Exit(1)
 
 
+def _resolve_resume_selection(choice: str, tasks: list[TaskDetail]) -> TaskDetail | None:
+    if not choice:
+        return None
+    if choice.isdigit():
+        index = int(choice)
+        if 1 <= index <= len(tasks):
+            return tasks[index - 1]
+        return None
+    for task in tasks:
+        if task.task_id == choice:
+            return task
+    return None
+
+
 @app.callback(invoke_without_command=True)
 def main(
     ctx: typer.Context,
     prompt: Optional[str] = typer.Option(None, "--prompt", "-p", help="One-shot prompt"),
+    resume: bool = typer.Option(False, "--resume", "-r", help="Resume a recent task"),
     model: str = typer.Option("manus-1.6", "--model", "-m", help="Agent profile"),
     version: bool = typer.Option(
         False, "--version", "-v", callback=version_callback, is_eager=True
@@ -56,10 +74,13 @@ def main(
 ):
     if ctx.invoked_subcommand is not None:
         return
+    if prompt and resume:
+        console.print("[red]Cannot combine --prompt and --resume.[/red]")
+        raise typer.Exit(1)
     if prompt:
         asyncio.run(_one_shot(prompt, model))
     else:
-        _run_command(_start_repl(model))
+        _run_command(_start_repl(model, resume=resume))
 
 
 async def _one_shot(prompt: str, model: str):
@@ -88,11 +109,51 @@ async def _one_shot(prompt: str, model: str):
         raise typer.Exit(1)
 
 
-async def _start_repl(model: str):
+async def _select_resume_task(session, limit: int = 20) -> tuple[TaskDetail | None, bool]:
+    from manus_cli.utils.display import print_task_table
+
+    tasks = await session.task_service.list(limit=limit)
+    if not tasks:
+        return None, False
+
+    print_task_table(tasks, console=console, show_index=True)
+    prompt = f"Select a task to resume [1-{len(tasks)} or task id, Enter to cancel]: "
+
+    while True:
+        choice = (await asyncio.to_thread(console.input, prompt)).strip()
+        if not choice:
+            return None, True
+
+        selected = _resolve_resume_selection(choice, tasks)
+        if selected:
+            task = await session.task_service.get(selected.task_id)
+            return task, False
+
+        console.print("[red]Invalid selection. Enter a listed number or exact task id.[/red]")
+
+
+async def _start_repl(model: str, resume: bool = False):
     from manus_cli.repl.session import ReplSession
 
     session = ReplSession(model=model)
-    await session.run()
+    startup_messages: list[str] = []
+
+    if resume:
+        selected_task, cancelled = await _select_resume_task(session)
+        if cancelled:
+            console.print("[yellow]Resume cancelled.[/yellow]")
+            await session.client.close()
+            return
+        if selected_task is None:
+            startup_messages.append("No recent tasks found to resume. Starting a new conversation.")
+        else:
+            session.load_task_context(selected_task)
+            startup_messages.append(
+                f"Resumed task {selected_task.task_id} ({selected_task.status.value}). "
+                "Your next message will continue this conversation."
+            )
+
+    await session.run(startup_messages=startup_messages)
 
 
 @app.command()
@@ -106,10 +167,11 @@ def run(
 
 @app.command()
 def chat(
+    resume: bool = typer.Option(False, "--resume", "-r", help="Resume a recent task"),
     model: str = typer.Option("manus-1.6", "--model", "-m"),
 ):
     """Start interactive REPL session."""
-    _run_command(_start_repl(model))
+    _run_command(_start_repl(model, resume=resume))
 
 
 # --- Auth commands ---

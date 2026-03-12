@@ -67,6 +67,7 @@ class TestTaskDetailParsing:
 
         assert detail.task_id == "tid-001"
         assert detail.status == TaskStatus.COMPLETED
+        assert detail.instructions is None
         assert len(detail.output) == 1
         assert len(detail.output[0].content) == 1
         assert detail.output[0].content[0].text == "Done!"
@@ -136,6 +137,19 @@ class TestTaskDetailParsing:
         assert item.file_name == "report.txt"
         assert item.url == "https://example.com/report.txt"
         assert item.file_id is None
+
+    def test_task_detail_accepts_instructions_field(self):
+        """TaskDetail should preserve the original instructions when provided by the API."""
+        detail = TaskDetail.model_validate(
+            {
+                "id": "tid-006",
+                "status": "completed",
+                "instructions": "Continue the previous discussion",
+                "output": [],
+            }
+        )
+
+        assert detail.instructions == "Continue the previous discussion"
 
     def test_file_info_accepts_official_aliases(self):
         """FileInfo should parse id/filename fields from the API."""

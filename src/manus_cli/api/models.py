@@ -66,6 +66,7 @@ class CreditUsage(_Base):
 class TaskDetail(_Base):
     task_id: str = Field(alias="id")
     status: TaskStatus = TaskStatus.PENDING
+    instructions: str | None = None
     output: list[OutputMessage] = Field(default_factory=list)
     credit_usage: CreditUsage | None = None
     created_at: str | None = None

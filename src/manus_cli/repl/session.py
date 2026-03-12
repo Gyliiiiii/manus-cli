@@ -8,9 +8,9 @@ from prompt_toolkit import PromptSession as PTSession
 from manus_cli.api.client import ManusClient
 from manus_cli.api.tasks import TaskService
 from manus_cli.api.files import FileService
-from manus_cli.api.models import CreateTaskRequest, AgentProfile, OutputText
+from manus_cli.api.models import CreateTaskRequest, AgentProfile, OutputFile, OutputText, TaskDetail
 from manus_cli.core.poller import TaskPoller
-from manus_cli.core.errors import ManusError
+from manus_cli.core.errors import APIError, ManusError
 from manus_cli.repl.renderer import OutputRenderer
 from manus_cli.repl.commands import SlashCommandRegistry, create_default_registry
 from manus_cli.repl.prompt import create_prompt_session
@@ -32,8 +32,11 @@ class ReplSession:
         self.history: list[dict] = []
         self.running = True
 
-    async def run(self) -> None:
+    async def run(self, startup_messages: list[str] | None = None) -> None:
         self.renderer.render_welcome()
+        if startup_messages:
+            for message in startup_messages:
+                self.renderer.render_info(message)
         try:
             while self.running:
                 try:
@@ -75,16 +78,8 @@ class ReplSession:
                 self.renderer.render_error(f"Upload failed: {e}")
         self.pending_attachments.clear()
 
-        # Create task
-        request = CreateTaskRequest(
-            prompt=prompt,
-            agent_profile=self.agent_profile,
-            task_id=self.current_task_id,
-            attachments=attachment_ids,
-        )
-
         try:
-            response = await self.task_service.create(request)
+            response = await self._create_task(prompt, attachment_ids)
             self.history.append({"role": "user", "preview": prompt})
 
             # Poll for result
@@ -105,3 +100,53 @@ class ReplSession:
                 self.history.append({"role": "assistant", "preview": preview})
         except ManusError as e:
             self.renderer.render_error(str(e))
+
+    def load_task_context(self, task: TaskDetail) -> None:
+        self.current_task_id = task.task_id
+        self.history = self._build_history(task)
+        self.renderer.render_task_context(task)
+
+    def _build_history(self, task: TaskDetail) -> list[dict]:
+        entries: list[dict] = []
+
+        if task.instructions and not task.output:
+            entries.append({"role": "user", "preview": task.instructions[:60]})
+            return entries
+
+        for msg in task.output:
+            parts: list[str] = []
+            for item in msg.content:
+                if isinstance(item, OutputText):
+                    parts.append(item.text.replace("\n", " ").strip())
+                elif isinstance(item, OutputFile):
+                    parts.append(f"[file] {item.file_name}")
+
+            preview = " ".join(part for part in parts if part).strip()[:60]
+            if preview:
+                entries.append({"role": msg.role, "preview": preview})
+
+        return entries
+
+    async def _create_task(self, prompt: str, attachment_ids: list[str]):
+        request = CreateTaskRequest(
+            prompt=prompt,
+            agent_profile=self.agent_profile,
+            task_id=self.current_task_id,
+            attachments=attachment_ids,
+        )
+        try:
+            return await self.task_service.create(request)
+        except APIError as e:
+            detail = e.detail.lower()
+            if self.current_task_id and e.status_code == 404 and "task not found" in detail:
+                self.renderer.render_info(
+                    "Previous conversation is no longer available. Starting a new conversation."
+                )
+                self.current_task_id = None
+                retry_request = CreateTaskRequest(
+                    prompt=prompt,
+                    agent_profile=self.agent_profile,
+                    attachments=attachment_ids,
+                )
+                return await self.task_service.create(retry_request)
+            raise
