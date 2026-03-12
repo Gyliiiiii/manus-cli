@@ -23,12 +23,12 @@ jobs:
 
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: pip
@@ -106,7 +106,7 @@ jobs:
       - name: Update PR summary comment
         if: always()
         continue-on-error: true
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           CHANGED_COUNT: ${{ steps.changed.outputs.count }}
           CHANGED_FILES: ${{ steps.changed.outputs.files }}
@@ -137,7 +137,7 @@ jobs:
               process.env.CHANGED_FILES || 'None',
               '```',
               '',
-              '> AI review is not enabled in this workflow yet. Add a model-backed step once repository secrets or platform credentials are available.',
+              '> Gemini Review runs as a separate workflow when `GEMINI_API_KEY` is configured.',
             ].join('\n');
 
             const { owner, repo } = context.repo;

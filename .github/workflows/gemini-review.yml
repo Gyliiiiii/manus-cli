@@ -1,0 +1,113 @@
+name: Gemini Review
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+concurrency:
+  group: gemini-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  gemini-review:
+    if: github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Collect PR diff snapshot
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const { owner, repo } = context.repo;
+            const pull_number = context.issue.number;
+            const pr = await github.rest.pulls.get({ owner, repo, pull_number });
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner,
+              repo,
+              pull_number,
+              per_page: 100,
+            });
+
+            const payload = {
+              repo: `${owner}/${repo}`,
+              pr_number: pull_number,
+              pr_title: pr.data.title,
+              pr_body: pr.data.body || '',
+              files: files.map((file) => ({
+                filename: file.filename,
+                status: file.status,
+                additions: file.additions,
+                deletions: file.deletions,
+                patch: file.patch || '',
+              })),
+            };
+
+            const outputPath = path.join(process.env.GITHUB_WORKSPACE, 'gemini-review-input.json');
+            fs.writeFileSync(outputPath, JSON.stringify(payload, null, 2));
+
+      - name: Generate Gemini review
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: gemini-2.5-flash
+        run: |
+          PYTHONPATH=src python -m manus_cli.ci.gemini_review \
+            --input gemini-review-input.json \
+            --output gemini-review-comment.md
+
+      - name: Write job summary
+        run: cat gemini-review-comment.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Create or update PR comment
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- manus-cli-gemini-review -->';
+            const body = fs.readFileSync('gemini-review-comment.md', 'utf8');
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+
+            const existing = comments.find((comment) =>
+              comment.user?.type === 'Bot' && comment.body?.includes(marker)
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body,
+              });
+            }
