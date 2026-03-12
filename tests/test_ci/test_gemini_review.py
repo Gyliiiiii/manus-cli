@@ -6,6 +6,7 @@ from manus_cli.ci.gemini_review import (
     build_comment_body,
     build_review_prompt,
     extract_review_text,
+    format_api_failure_review_text,
     normalize_review_text,
     select_review_files,
 )
@@ -92,3 +93,19 @@ class TestGeminiReviewHelpers:
         normalized = normalize_review_text(text)
 
         assert normalized == "No material issues found."
+
+    def test_format_api_failure_review_text_handles_quota_errors(self):
+        exc = RuntimeError("Gemini API request failed with 429: quota exceeded")
+
+        text = format_api_failure_review_text(exc)
+
+        assert "quota exceeded" in text.lower()
+        assert "retry" in text.lower()
+
+    def test_format_api_failure_review_text_truncates_generic_errors(self):
+        exc = RuntimeError("x" * 400)
+
+        text = format_api_failure_review_text(exc)
+
+        assert text.startswith("Gemini review skipped due to API error:")
+        assert len(text) < 380
