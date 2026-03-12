@@ -115,6 +115,8 @@ class TestOutputRendererDownloads:
 
         assert not (tmp_path / "report.txt").exists()
         output = console.export_text()
-        assert "Loaded context from task task-789" in output
+        assert "Resumed Conversation" in output
+        assert "task-789" in output
         assert "Please summarize the report" in output
         assert "report.txt" in output
+        assert "Continue by typing your next message." in output

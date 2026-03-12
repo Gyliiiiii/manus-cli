@@ -6,14 +6,14 @@ from pathlib import Path
 from prompt_toolkit import PromptSession as PTSession
 
 from manus_cli.api.client import ManusClient
-from manus_cli.api.tasks import TaskService
 from manus_cli.api.files import FileService
-from manus_cli.api.models import CreateTaskRequest, AgentProfile, OutputFile, OutputText, TaskDetail
-from manus_cli.core.poller import TaskPoller
+from manus_cli.api.models import AgentProfile, CreateTaskRequest, OutputFile, OutputText, TaskDetail
+from manus_cli.api.tasks import TaskService
 from manus_cli.core.errors import APIError, ManusError
-from manus_cli.repl.renderer import OutputRenderer
-from manus_cli.repl.commands import SlashCommandRegistry, create_default_registry
+from manus_cli.core.poller import TaskPoller
+from manus_cli.repl.commands import create_default_registry
 from manus_cli.repl.prompt import create_prompt_session
+from manus_cli.repl.renderer import OutputRenderer
 
 
 class ReplSession:
@@ -32,8 +32,14 @@ class ReplSession:
         self.history: list[dict] = []
         self.running = True
 
-    async def run(self, startup_messages: list[str] | None = None) -> None:
+    async def run(
+        self,
+        startup_messages: list[str] | None = None,
+        startup_task: TaskDetail | None = None,
+    ) -> None:
         self.renderer.render_welcome()
+        if startup_task is not None:
+            self.renderer.render_task_context(startup_task)
         if startup_messages:
             for message in startup_messages:
                 self.renderer.render_info(message)
@@ -101,10 +107,11 @@ class ReplSession:
         except ManusError as e:
             self.renderer.render_error(str(e))
 
-    def load_task_context(self, task: TaskDetail) -> None:
+    def load_task_context(self, task: TaskDetail, render: bool = True) -> None:
         self.current_task_id = task.task_id
         self.history = self._build_history(task)
-        self.renderer.render_task_context(task)
+        if render:
+            self.renderer.render_task_context(task)
 
     def _build_history(self, task: TaskDetail) -> list[dict]:
         entries: list[dict] = []

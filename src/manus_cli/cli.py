@@ -111,10 +111,11 @@ async def _one_shot(prompt: str, model: str):
 
 async def _select_resume_task(session, limit: int = 20) -> tuple[TaskDetail | None, bool]:
     from manus_cli.repl.prompt import (
+        format_resume_task_label,
+        format_resume_task_meta,
         select_resume_task_interactively,
         supports_interactive_resume_selector,
     )
-    from manus_cli.utils.display import print_task_table
 
     tasks = await session.task_service.list(limit=limit)
     if not tasks:
@@ -127,8 +128,13 @@ async def _select_resume_task(session, limit: int = 20) -> tuple[TaskDetail | No
         task = await session.task_service.get(selected_id)
         return task, False
 
-    print_task_table(tasks, console=console, show_index=True)
-    prompt = f"Select a task to resume [1-{len(tasks)} or task id, Enter to cancel]: "
+    console.print("[bold]Resume Conversation[/bold]")
+    console.print("[dim]Choose a task number or paste a task id. Press Enter to cancel.[/dim]")
+    for idx, task in enumerate(tasks, 1):
+        console.print(format_resume_task_label(task, idx))
+        console.print(f"[dim]   {format_resume_task_meta(task)}[/dim]")
+
+    prompt = "resume> "
 
     while True:
         choice = (await asyncio.to_thread(console.input, prompt)).strip()
@@ -147,6 +153,7 @@ async def _start_repl(model: str, resume: bool = False):
 
     session = ReplSession(model=model)
     startup_messages: list[str] = []
+    startup_task: TaskDetail | None = None
 
     if resume:
         selected_task, cancelled = await _select_resume_task(session)
@@ -157,13 +164,10 @@ async def _start_repl(model: str, resume: bool = False):
         if selected_task is None:
             startup_messages.append("No recent tasks found to resume. Starting a new conversation.")
         else:
-            session.load_task_context(selected_task)
-            startup_messages.append(
-                f"Resumed task {selected_task.task_id} ({selected_task.status.value}). "
-                "Your next message will continue this conversation."
-            )
+            session.load_task_context(selected_task, render=False)
+            startup_task = selected_task
 
-    await session.run(startup_messages=startup_messages)
+    await session.run(startup_messages=startup_messages, startup_task=startup_task)
 
 
 @app.command()
