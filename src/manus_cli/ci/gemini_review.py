@@ -11,6 +11,11 @@ MARKER = "<!-- manus-cli-gemini-review -->"
 DEFAULT_MODEL = "gemini-2.5-flash"
 MAX_FILES = 20
 MAX_PATCH_CHARS = 120_000
+SKIP_REVIEW_PREFIXES = (
+    ".github/workflows/gemini-review.yml",
+    "src/manus_cli/ci/",
+    "tests/test_ci/",
+)
 
 
 @dataclass
@@ -43,6 +48,10 @@ def select_review_files(
     skipped = 0
 
     for item in files:
+        filename = item.get("filename", "")
+        if any(filename.startswith(prefix) for prefix in SKIP_REVIEW_PREFIXES):
+            skipped += 1
+            continue
         patch = item.get("patch") or ""
         if not patch:
             skipped += 1

@@ -14,6 +14,7 @@ from manus_cli.ci.gemini_review import (
 class TestGeminiReviewHelpers:
     def test_select_review_files_skips_missing_patches_and_truncates(self):
         files = [
+            {"filename": "src/manus_cli/ci/gemini_review.py", "patch": "+print('skip self')\n"},
             {"filename": "binary.png", "patch": ""},
             {"filename": "src/a.py", "patch": "+print('hello')\n"},
             {"filename": "src/b.py", "patch": "+" + "x" * 20},
@@ -21,7 +22,7 @@ class TestGeminiReviewHelpers:
 
         selected, skipped = select_review_files(files, max_files=5, max_patch_chars=18)
 
-        assert skipped == 1
+        assert skipped == 2
         assert len(selected) == 2
         assert selected[0]["filename"] == "src/a.py"
         assert selected[1]["truncated"] is True
