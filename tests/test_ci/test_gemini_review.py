@@ -52,8 +52,9 @@ class TestGeminiReviewHelpers:
         assert "#12 - Add interactive selector" in prompt
         assert "Improve `manus -r` UX." in prompt
         assert "src/manus_cli/cli.py" in prompt
-        assert "Some files or patch content were skipped" in prompt
+        assert "intentionally omitted or truncated for review budget" in prompt
         assert "Do not report speculative best-practice concerns" in prompt
+        assert "Review only the provided diff" in prompt
         assert "Do not flag standard GitHub Actions secret usage" in prompt
 
     def test_extract_review_text_reads_first_candidate_parts(self):

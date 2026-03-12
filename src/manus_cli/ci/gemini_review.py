@@ -86,7 +86,9 @@ def build_review_prompt(context: ReviewContext, files: list[dict], skipped: int)
         file_sections.append(f"{header}\n```diff\n{patch}\n```")
 
     skipped_note = (
-        f"\nSome files or patch content were skipped/truncated due to review limits: {skipped}."
+        "\nSome changed files or patch content were intentionally omitted or truncated for "
+        f"review budget: {skipped}. Review only the provided diff and do not treat omitted "
+        "files or missing context as findings."
         if skipped
         else ""
     )
@@ -98,6 +100,8 @@ def build_review_prompt(context: ReviewContext, files: list[dict], skipped: int)
         "and missing tests. Ignore minor style nits.\n"
         "Do not report speculative best-practice concerns without a concrete exploit path, regression, "
         "or observable failure mode in the diff.\n"
+        "Review only the provided diff. Do not complain that other files or context are missing, and "
+        "do not turn omitted files into findings by themselves.\n"
         "Do not flag standard GitHub Actions secret usage via `${{ secrets.* }}` passed through step "
         "environment variables unless the diff also exposes the secret through logging, artifacts, "
         "forked pull requests, or untrusted third-party actions.\n"
