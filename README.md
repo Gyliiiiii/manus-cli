@@ -90,6 +90,7 @@ Additional GitHub-native security checks:
 
 - `Dependency Review` runs on pull requests and fails on newly introduced `high` or `critical` dependency findings
 - `CodeQL` scans Python on pushes to `main`, pull requests targeting `main`, and a weekly schedule
+- `Gemini Review` can post an AI review comment on pull requests after you add `GEMINI_API_KEY` under `Settings` -> `Secrets and variables` -> `Actions`
 
 ## License
 
