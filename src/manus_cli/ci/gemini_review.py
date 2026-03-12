@@ -8,7 +8,7 @@ from pathlib import Path
 from urllib import error, request
 
 MARKER = "<!-- manus-cli-gemini-review -->"
-DEFAULT_MODEL = "gemini-2.5-flash"
+DEFAULT_MODEL = "gemini-3.1-pro-preview"
 MAX_FILES = 20
 MAX_PATCH_CHARS = 120_000
 SKIP_REVIEW_PREFIXES = (

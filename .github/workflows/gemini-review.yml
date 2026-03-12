@@ -67,7 +67,7 @@ jobs:
       - name: Generate Gemini review
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GEMINI_MODEL: gemini-2.5-flash
+          GEMINI_MODEL: gemini-3.1-pro-preview
         run: |
           PYTHONPATH=src python -m manus_cli.ci.gemini_review \
             --input gemini-review-input.json \

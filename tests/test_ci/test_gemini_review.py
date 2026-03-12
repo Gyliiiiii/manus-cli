@@ -75,11 +75,11 @@ class TestGeminiReviewHelpers:
         assert text == "- [medium] src/manus_cli/cli.py: misses fallback case"
 
     def test_build_comment_body_wraps_marker_and_model(self):
-        body = build_comment_body("No material issues found.", model="gemini-2.5-flash")
+        body = build_comment_body("No material issues found.", model="gemini-3.1-pro-preview")
 
         assert body.startswith(MARKER)
         assert "## Gemini Review" in body
-        assert "_Model: `gemini-2.5-flash`_" in body
+        assert "_Model: `gemini-3.1-pro-preview`_" in body
         assert body.endswith("No material issues found.")
 
     def test_normalize_review_text_suppresses_generic_secret_warning(self):
