@@ -42,36 +42,36 @@ class OutputRenderer:
                 f"out: {task.credit_usage.output_credits:.2f})[/dim]"
             )
 
-    def render_task_context(self, task: TaskDetail) -> None:
-        """Render a task's existing conversation history without downloading files again."""
-        self._console.print(f"[dim]Loaded context from task {task.task_id}[/dim]")
+    def render_task_context(self, task: TaskDetail, max_messages: int | None = None) -> None:
+        """Render resumed context in a compact terminal-friendly layout."""
+        created = (task.created_at or "unknown time").replace("T", " ").replace("Z", "")
+        created = created[:16]
+        task_id = self._short_task_id(task.task_id)
+        divider = "─" * self._context_line_width()
+        self._console.print(
+            f"[bold]Resumed Conversation[/bold] [dim]{task.status.value} | {created} | {task_id}[/dim]"
+        )
+        self._console.print(f"[dim]{divider}[/dim]")
 
-        if task.instructions and not task.output:
-            self._console.print("[bold cyan]user[/bold cyan]")
-            self._render_text(task.instructions)
-            return
-
-        if not task.output:
+        preview_width = self._context_preview_width()
+        entries = self._context_entries(task, preview_width=preview_width)
+        if not entries:
             self._console.print("[dim]No prior conversation found for this task.[/dim]")
             return
 
-        role_colors = {
-            "user": "cyan",
-            "assistant": "green",
-            "system": "yellow",
-        }
+        window_size = self._context_window_size(total_entries=len(entries), explicit_max=max_messages)
+        hidden_count = max(0, len(entries) - window_size)
+        if hidden_count:
+            self._console.print(f"[dim]... {hidden_count} earlier messages hidden[/dim]")
 
-        for msg in task.output:
-            color = role_colors.get(msg.role, "white")
-            self._console.print(f"[bold {color}]{msg.role}[/bold {color}]")
-            if not msg.content:
-                self._console.print("[dim]No content[/dim]")
-                continue
-            for item in msg.content:
-                if isinstance(item, OutputText):
-                    self._render_text(item.text)
-                elif isinstance(item, OutputFile):
-                    self._render_file_reference(item)
+        role_colors = {"user": "cyan", "assistant": "green", "system": "yellow"}
+        role_labels = {"user": "you", "assistant": "assistant", "system": "system"}
+        for role, preview in entries[-window_size:]:
+            color = role_colors.get(role, "white")
+            label = role_labels.get(role, role)
+            self._console.print(f"[bold {color}]{label:>9}[/bold {color}]  {preview}")
+
+        self._console.print("[dim]Continue by typing your next message.[/dim]")
 
     def _render_text(self, text: str) -> None:
         md = Markdown(text)
@@ -101,6 +101,54 @@ class OutputRenderer:
         self._console.print(
             f"  [bold green]📎 {file.file_name}[/bold green]{meta_text}"
         )
+
+    def _context_entries(self, task: TaskDetail, preview_width: int) -> list[tuple[str, str]]:
+        entries: list[tuple[str, str]] = []
+        if task.instructions and not task.output:
+            preview = self._truncate_inline(task.instructions, max_width=preview_width)
+            return [("user", preview)]
+
+        for msg in task.output:
+            parts: list[str] = []
+            for item in msg.content:
+                if isinstance(item, OutputText):
+                    text = self._truncate_inline(item.text, max_width=preview_width)
+                    if text:
+                        parts.append(text)
+                elif isinstance(item, OutputFile):
+                    parts.append(f"[file] {item.file_name}")
+            preview = self._truncate_inline(" ".join(parts), max_width=preview_width)
+            if preview:
+                entries.append((msg.role, preview))
+        return entries
+
+    def _truncate_inline(self, text: str, max_width: int) -> str:
+        compact = " ".join(text.split())
+        if len(compact) <= max_width:
+            return compact
+        return f"{compact[: max_width - 3]}..."
+
+    def _short_task_id(self, task_id: str) -> str:
+        if len(task_id) <= 24:
+            return task_id
+        return f"{task_id[:10]}...{task_id[-8:]}"
+
+    def _context_line_width(self) -> int:
+        width = self._console.size.width
+        return max(40, min(120, width))
+
+    def _context_preview_width(self) -> int:
+        width = self._console.size.width
+        # Reserve room for role label and paddings.
+        return max(40, min(140, width - 16))
+
+    def _context_window_size(self, total_entries: int, explicit_max: int | None) -> int:
+        if explicit_max is not None:
+            return max(1, explicit_max)
+        height = self._console.size.height
+        # Title + divider + summary + hint consume ~6 lines.
+        available = max(4, height - 6)
+        return min(total_entries, min(12, available))
 
     def _download_file(self, file: OutputFile) -> Path | None:
         if not file.url:
@@ -144,11 +192,4 @@ class OutputRenderer:
         self._console.print(f"[bold red]Error:[/bold red] {message}")
 
     def render_welcome(self) -> None:
-        self._console.print(
-            Panel(
-                "[bold]Manus CLI[/bold] - AI Agent Interface\n"
-                "Type your prompt to start a task. Use [bold]/help[/bold] for commands.",
-                border_style="cyan",
-                padding=(1, 2),
-            )
-        )
+        self._console.print("[bold]Manus CLI[/bold] [dim]Type a prompt or run /help[/dim]")

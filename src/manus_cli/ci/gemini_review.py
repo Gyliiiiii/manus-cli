@@ -11,6 +11,7 @@ MARKER = "<!-- manus-cli-gemini-review -->"
 DEFAULT_MODEL = "gemini-3.1-pro-preview"
 MAX_FILES = 20
 MAX_PATCH_CHARS = 120_000
+MAX_ERROR_TEXT_CHARS = 280
 SKIP_REVIEW_PREFIXES = (
     ".github/workflows/gemini-review.yml",
     "src/manus_cli/ci/",
@@ -190,6 +191,25 @@ def normalize_review_text(review_text: str) -> str:
     return text
 
 
+def format_api_failure_review_text(exc: Exception) -> str:
+    message = str(exc).strip()
+    lowered = message.lower()
+
+    if (
+        "429" in message
+        or "resource_exhausted" in lowered
+        or "quota exceeded" in lowered
+    ):
+        return (
+            "Gemini review skipped: API quota exceeded (HTTP 429). "
+            "Please retry this workflow later."
+        )
+
+    if len(message) > MAX_ERROR_TEXT_CHARS:
+        message = message[: MAX_ERROR_TEXT_CHARS - 3] + "..."
+    return f"Gemini review skipped due to API error: `{message}`"
+
+
 def build_comment_body(review_text: str, model: str) -> str:
     review_text = normalize_review_text(review_text)
     return "\n".join(
@@ -229,7 +249,10 @@ def main() -> None:
         review_text = "No reviewable text diff found in this pull request."
     else:
         prompt = build_review_prompt(context, files, skipped)
-        review_text = call_gemini(prompt, api_key=api_key, model=args.model)
+        try:
+            review_text = call_gemini(prompt, api_key=api_key, model=args.model)
+        except RuntimeError as exc:
+            review_text = format_api_failure_review_text(exc)
 
     comment = build_comment_body(review_text, args.model)
     Path(args.output).write_text(comment + "\n", encoding="utf-8")
