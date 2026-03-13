@@ -7,7 +7,15 @@ from prompt_toolkit import PromptSession as PTSession
 
 from manus_cli.api.client import ManusClient
 from manus_cli.api.files import FileService
-from manus_cli.api.models import AgentProfile, CreateTaskRequest, OutputFile, OutputText, TaskDetail
+from manus_cli.api.models import (
+    AgentProfile,
+    CreateTaskRequest,
+    FileIdAttachment,
+    OutputFile,
+    OutputText,
+    TaskAttachment,
+    TaskDetail,
+)
 from manus_cli.api.tasks import TaskService
 from manus_cli.core.errors import APIError, ManusError
 from manus_cli.core.poller import TaskPoller
@@ -74,18 +82,23 @@ class ReplSession:
 
     async def _handle_prompt(self, prompt: str) -> None:
         # Upload any pending attachments
-        attachment_ids: list[str] = []
+        attachments: list[TaskAttachment] = []
         for path_str in self.pending_attachments:
             try:
                 file_info = await self.file_service.upload(Path(path_str))
-                attachment_ids.append(file_info.file_id)
+                attachments.append(
+                    FileIdAttachment(
+                        filename=file_info.file_name,
+                        file_id=file_info.file_id,
+                    )
+                )
                 self.renderer.render_info(f"Uploaded: {file_info.file_name}")
             except ManusError as e:
                 self.renderer.render_error(f"Upload failed: {e}")
         self.pending_attachments.clear()
 
         try:
-            response = await self._create_task(prompt, attachment_ids)
+            response = await self._create_task(prompt, attachments)
             self.history.append({"role": "user", "preview": prompt})
 
             # Poll for result
@@ -134,12 +147,12 @@ class ReplSession:
 
         return entries
 
-    async def _create_task(self, prompt: str, attachment_ids: list[str]):
+    async def _create_task(self, prompt: str, attachments: list[TaskAttachment]):
         request = CreateTaskRequest(
             prompt=prompt,
             agent_profile=self.agent_profile,
             task_id=self.current_task_id,
-            attachments=attachment_ids,
+            attachments=attachments,
         )
         try:
             return await self.task_service.create(request)
@@ -153,7 +166,7 @@ class ReplSession:
                 retry_request = CreateTaskRequest(
                     prompt=prompt,
                     agent_profile=self.agent_profile,
-                    attachments=attachment_ids,
+                    attachments=attachments,
                 )
                 return await self.task_service.create(retry_request)
             raise

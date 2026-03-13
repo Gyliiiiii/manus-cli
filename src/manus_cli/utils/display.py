@@ -3,7 +3,7 @@ from __future__ import annotations
 from rich.console import Console
 from rich.table import Table
 
-from manus_cli.api.models import FileInfo, TaskDetail
+from manus_cli.api.models import FileInfo, ProjectInfo, TaskDetail
 
 
 def task_preview(task: TaskDetail, max_width: int = 50) -> str:
@@ -63,6 +63,25 @@ def print_file_table(files: list[FileInfo], console: Console | None = None) -> N
     for f in files:
         size_str = _format_size(f.file_size) if f.file_size else ""
         table.add_row(f.file_id, f.file_name, size_str, f.created_at or "")
+
+    console.print(table)
+
+
+def print_project_table(projects: list[ProjectInfo], console: Console | None = None) -> None:
+    console = console or Console()
+    table = Table(title="Projects")
+    table.add_column("Project ID", style="cyan", no_wrap=True)
+    table.add_column("Name", style="bold")
+    table.add_column("Instruction", max_width=60)
+    table.add_column("Created", style="dim")
+
+    for project in projects:
+        table.add_row(
+            project.project_id,
+            project.name,
+            project.instruction or "",
+            project.created_at or "",
+        )
 
     console.print(table)
 

@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 from manus_cli.api.client import ManusClient
-from manus_cli.api.models import CreateTaskRequest, CreateTaskResponse, TaskDetail
+from manus_cli.api.models import (
+    CreateTaskRequest,
+    CreateTaskResponse,
+    TaskDetail,
+    UpdateTaskRequest,
+)
 
 
 class TaskService:
@@ -30,3 +35,15 @@ class TaskService:
 
     async def delete(self, task_id: str) -> None:
         await self._client.request("DELETE", f"/tasks/{task_id}")
+
+    async def update(
+        self,
+        task_id: str,
+        request: UpdateTaskRequest,
+    ) -> CreateTaskResponse:
+        data = await self._client.request(
+            "PUT",
+            f"/tasks/{task_id}",
+            json=request.model_dump(exclude_none=True, by_alias=True),
+        )
+        return CreateTaskResponse.model_validate(data)

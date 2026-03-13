@@ -21,11 +21,15 @@ app = typer.Typer(
 auth_app = typer.Typer(help="Authentication commands")
 task_app = typer.Typer(help="Task management commands")
 file_app = typer.Typer(help="File management commands")
+project_app = typer.Typer(help="Project management commands")
+webhook_app = typer.Typer(help="Webhook management commands")
 config_app = typer.Typer(help="Configuration commands")
 
 app.add_typer(auth_app, name="auth")
 app.add_typer(task_app, name="task")
 app.add_typer(file_app, name="file")
+app.add_typer(project_app, name="project")
+app.add_typer(webhook_app, name="webhook")
 app.add_typer(config_app, name="config")
 
 console = Console()
@@ -322,6 +326,53 @@ async def _task_delete(task_id: str):
         console.print(f"[green]Task {task_id} deleted.[/green]")
 
 
+@task_app.command("update")
+def task_update(
+    task_id: str = typer.Argument(..., help="Task ID"),
+    title: str | None = typer.Option(None, "--title", help="New task title"),
+    share: bool | None = typer.Option(
+        None,
+        "--share/--no-share",
+        help="Enable or disable public sharing",
+    ),
+    visible: bool | None = typer.Option(
+        None,
+        "--visible/--hidden",
+        help="Control whether the task appears in task list",
+    ),
+):
+    """Update task metadata."""
+    _run_command(_task_update(task_id, title=title, share=share, visible=visible))
+
+
+async def _task_update(
+    task_id: str,
+    title: str | None,
+    share: bool | None,
+    visible: bool | None,
+):
+    from manus_cli.api.client import ManusClient
+    from manus_cli.api.models import UpdateTaskRequest
+    from manus_cli.api.tasks import TaskService
+
+    if title is None and share is None and visible is None:
+        console.print("[red]Provide at least one update field (--title, --share/--no-share, --visible/--hidden).[/red]")
+        raise typer.Exit(1)
+
+    async with ManusClient() as client:
+        result = await TaskService(client).update(
+            task_id,
+            UpdateTaskRequest(
+                title=title,
+                enable_shared=share,
+                enable_visible_in_task_list=visible,
+            ),
+        )
+
+    summary = result.task_title or title or "updated"
+    console.print(f"[green]Task {result.task_id} updated.[/green] {summary}")
+
+
 # --- File commands ---
 
 
@@ -357,6 +408,86 @@ async def _file_list(limit: int):
     async with ManusClient() as client:
         files = await FileService(client).list(limit=limit)
         print_file_table(files)
+
+
+# --- Project commands ---
+
+
+@project_app.command("list")
+def project_list(limit: int = typer.Option(100, "--limit", "-n")):
+    """List projects."""
+    _run_command(_project_list(limit))
+
+
+async def _project_list(limit: int):
+    from manus_cli.api.client import ManusClient
+    from manus_cli.api.projects import ProjectService
+    from manus_cli.utils.display import print_project_table
+
+    async with ManusClient() as client:
+        projects = await ProjectService(client).list(limit=limit)
+        print_project_table(projects)
+
+
+@project_app.command("create")
+def project_create(
+    name: str = typer.Argument(..., help="Project name"),
+    instruction: str | None = typer.Option(
+        None,
+        "--instruction",
+        help="Default instruction applied to tasks in this project",
+    ),
+):
+    """Create a project."""
+    _run_command(_project_create(name=name, instruction=instruction))
+
+
+async def _project_create(name: str, instruction: str | None):
+    from manus_cli.api.client import ManusClient
+    from manus_cli.api.models import CreateProjectRequest
+    from manus_cli.api.projects import ProjectService
+
+    async with ManusClient() as client:
+        project = await ProjectService(client).create(
+            CreateProjectRequest(name=name, instruction=instruction)
+        )
+    console.print(f"[green]Project created:[/green] {project.name} (ID: {project.project_id})")
+
+
+# --- Webhook commands ---
+
+
+@webhook_app.command("create")
+def webhook_create(url: str = typer.Argument(..., help="Webhook URL")):
+    """Create a webhook."""
+    _run_command(_webhook_create(url))
+
+
+async def _webhook_create(url: str):
+    from manus_cli.api.client import ManusClient
+    from manus_cli.api.models import CreateWebhookRequest, WebhookTarget
+    from manus_cli.api.webhooks import WebhookService
+
+    async with ManusClient() as client:
+        webhook = await WebhookService(client).create(
+            CreateWebhookRequest(webhook=WebhookTarget(url=url))
+        )
+    console.print(f"[green]Webhook created:[/green] {webhook.webhook_id}")
+
+
+@webhook_app.command("delete")
+def webhook_delete(webhook_id: str = typer.Argument(..., help="Webhook ID")):
+    """Delete a webhook."""
+    _run_command(_webhook_delete(webhook_id))
+
+
+async def _webhook_delete(webhook_id: str):
+    from manus_cli.api.client import ManusClient
+    from manus_cli.api.webhooks import WebhookService
+
+    async with ManusClient() as client:
+        await WebhookService(client).delete(webhook_id)
+    console.print(f"[green]Webhook {webhook_id} deleted.[/green]")
 
 
 # --- Config commands ---
