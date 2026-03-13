@@ -40,8 +40,13 @@ manus -r                 # open an interactive selector, resume a task, and cont
 | `manus task list` | List recent tasks |
 | `manus task get <id>` | Show task details |
 | `manus task delete <id>` | Delete a task |
+| `manus task update <id> [--title ...] [--share/--no-share] [--visible/--hidden]` | Update task metadata |
 | `manus file upload <path>` | Upload a file |
 | `manus file list` | List uploaded files |
+| `manus project list` | List projects |
+| `manus project create <name> [--instruction ...]` | Create a project |
+| `manus webhook create <url>` | Create a webhook |
+| `manus webhook delete <webhook_id>` | Delete a webhook |
 | `manus config set <key> <val>` | Set config value |
 | `manus config show` | Show all config |
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from enum import StrEnum
-
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -24,6 +24,25 @@ class AgentProfile(StrEnum):
     MAX = "manus-1.6-max"
 
 
+class FileIdAttachment(_Base):
+    filename: str
+    file_id: str
+
+
+class UrlAttachment(_Base):
+    filename: str
+    url: str
+    mime_type: str | None = Field(default=None, alias="mimeType")
+
+
+class Base64Attachment(_Base):
+    filename: str
+    file_data: str = Field(alias="fileData")
+
+
+TaskAttachment = FileIdAttachment | UrlAttachment | Base64Attachment
+
+
 class CreateTaskRequest(_Base):
     prompt: str
     agent_profile: AgentProfile = Field(
@@ -31,12 +50,38 @@ class CreateTaskRequest(_Base):
     )
     task_mode: str | None = Field(default=None, alias="taskMode")
     task_id: str | None = Field(default=None, alias="taskId")  # for multi-turn continuation
-    attachments: list[str] = Field(default_factory=list)  # file IDs
+    attachments: list[TaskAttachment] = Field(default_factory=list)
+    connectors: list[Any] = Field(default_factory=list)
+    hide_in_task_list: bool | None = Field(default=None, alias="hideInTaskList")
+    create_shareable_link: bool | None = Field(default=None, alias="createShareableLink")
+    locale: str | None = None
+    project_id: str | None = Field(default=None, alias="projectId")
+    interactive_mode: bool | None = Field(default=None, alias="interactiveMode")
 
 
 class CreateTaskResponse(_Base):
-    task_id: str = Field(alias="id")
+    task_id: str
+    task_title: str | None = None
+    task_url: str | None = None
+    share_url: str | None = None
     status: TaskStatus = TaskStatus.PENDING
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        if "task_id" not in data and "id" in data:
+            data["task_id"] = data["id"]
+        return data
+
+
+class UpdateTaskRequest(_Base):
+    title: str | None = None
+    enable_shared: bool | None = Field(default=None, alias="enableShared")
+    enable_visible_in_task_list: bool | None = Field(
+        default=None, alias="enableVisibleInTaskList"
+    )
 
 
 class OutputText(_Base):
@@ -99,6 +144,8 @@ class TaskDetail(_Base):
                     data["output"] = [out]
                 else:
                     data["output"] = [{"role": "assistant", "content": [out]}]
+            data["created_at"] = _normalize_timestamp(data.get("created_at"))
+            data["updated_at"] = _normalize_timestamp(data.get("updated_at"))
         return data
 
 
@@ -114,3 +161,47 @@ class PresignedUpload(_Base):
     file_id: str = Field(alias="id")
     file_name: str | None = Field(default=None, alias="filename")
     upload_url: str
+
+
+class ProjectInfo(_Base):
+    project_id: str = Field(alias="id")
+    name: str
+    instruction: str | None = None
+    created_at: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            data["created_at"] = _normalize_timestamp(data.get("created_at"))
+        return data
+
+
+class CreateProjectRequest(_Base):
+    name: str
+    instruction: str | None = None
+
+
+class WebhookTarget(_Base):
+    url: str
+
+
+class CreateWebhookRequest(_Base):
+    webhook: WebhookTarget
+
+
+class CreateWebhookResponse(_Base):
+    webhook_id: str
+
+
+def _normalize_timestamp(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (int, float)):
+        try:
+            return datetime.fromtimestamp(value, tz=UTC).isoformat().replace("+00:00", "Z")
+        except (OverflowError, OSError, ValueError):
+            return str(value)
+    return str(value)

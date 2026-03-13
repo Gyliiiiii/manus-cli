@@ -135,3 +135,48 @@ class TestResumeCli:
         assert "Error:" in result.output
         assert "No API key found" in result.output
         assert "Traceback" not in result.output
+
+
+class TestApiCoverageCli:
+    def test_task_update_requires_at_least_one_field(self):
+        result = runner.invoke(app, ["task", "update", "task-1"])
+
+        assert result.exit_code == 1
+        assert "Provide at least one update field" in result.output
+
+    def test_task_update_parses_new_flags(self, monkeypatch):
+        captured: dict[str, object] = {}
+
+        async def fake_task_update(task_id: str, title: str | None, share: bool | None, visible: bool | None):
+            captured["task_id"] = task_id
+            captured["title"] = title
+            captured["share"] = share
+            captured["visible"] = visible
+
+        monkeypatch.setattr(cli_mod, "_task_update", fake_task_update)
+        monkeypatch.setattr(cli_mod, "_run_command", lambda command: asyncio.run(command))
+
+        result = runner.invoke(
+            app,
+            ["task", "update", "task-1", "--title", "Renamed", "--share", "--hidden"],
+        )
+
+        assert result.exit_code == 0
+        assert captured == {
+            "task_id": "task-1",
+            "title": "Renamed",
+            "share": True,
+            "visible": False,
+        }
+
+    def test_new_command_groups_are_available(self):
+        project_help = runner.invoke(app, ["project", "--help"])
+        webhook_help = runner.invoke(app, ["webhook", "--help"])
+
+        assert project_help.exit_code == 0
+        assert "create" in project_help.output
+        assert "list" in project_help.output
+
+        assert webhook_help.exit_code == 0
+        assert "create" in webhook_help.output
+        assert "delete" in webhook_help.output

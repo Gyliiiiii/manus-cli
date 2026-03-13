@@ -2,12 +2,15 @@ from __future__ import annotations
 
 from manus_cli.api.models import (
     AgentProfile,
+    Base64Attachment,
     CreateTaskRequest,
-    CreditUsage,
+    CreateTaskResponse,
+    FileIdAttachment,
     FileInfo,
-    OutputMessage,
+    ProjectInfo,
     TaskDetail,
     TaskStatus,
+    UrlAttachment,
 )
 
 
@@ -21,6 +24,7 @@ class TestCreateTaskRequestDefaults:
         assert req.task_mode is None
         assert req.task_id is None
         assert req.attachments == []
+        assert req.connectors == []
 
     def test_create_task_request_uses_api_aliases(self):
         """Task creation payload should serialize to the official API field names."""
@@ -37,6 +41,37 @@ class TestCreateTaskRequestDefaults:
         assert data["taskMode"] == "sync"
         assert data["taskId"] == "task-123"
         assert "agent_profile" not in data
+
+    def test_create_task_request_serializes_attachment_variants(self):
+        req = CreateTaskRequest(
+            prompt="Attach everything",
+            attachments=[
+                FileIdAttachment(filename="a.txt", file_id="file-123"),
+                UrlAttachment(filename="image.png", url="https://example.com/image.png"),
+                Base64Attachment(
+                    filename="inline.txt",
+                    file_data="data:text/plain;base64,SGVsbG8=",
+                ),
+            ],
+        )
+
+        data = req.model_dump(exclude_none=True, by_alias=True)
+
+        assert data["attachments"][0] == {"filename": "a.txt", "file_id": "file-123"}
+        assert data["attachments"][1] == {
+            "filename": "image.png",
+            "url": "https://example.com/image.png",
+        }
+        assert data["attachments"][2] == {
+            "filename": "inline.txt",
+            "fileData": "data:text/plain;base64,SGVsbG8=",
+        }
+
+    def test_create_task_response_accepts_legacy_id_shape(self):
+        response = CreateTaskResponse.model_validate({"id": "task-legacy", "status": "pending"})
+
+        assert response.task_id == "task-legacy"
+        assert response.status is TaskStatus.PENDING
 
 
 class TestTaskDetailParsing:
@@ -160,6 +195,18 @@ class TestTaskDetailParsing:
         assert info.file_id == "file-123"
         assert info.file_name == "report.txt"
         assert info.file_size == 128
+
+    def test_project_info_normalizes_unix_timestamp(self):
+        project = ProjectInfo.model_validate(
+            {
+                "id": "proj-123",
+                "name": "Demo Project",
+                "created_at": 1735689600,
+            }
+        )
+
+        assert project.project_id == "proj-123"
+        assert project.created_at == "2025-01-01T00:00:00Z"
 
 
 class TestTaskStatusEnum:
